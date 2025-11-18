@@ -1,0 +1,328 @@
+{
+  "name": "KA Scraper 2.0 Copy",
+  "nodes": [
+    {
+      "parameters": {
+        "fieldToSplitOut": "startindices",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        928,
+        -64
+      ],
+      "id": "58a84cc9-9ef5-4a7b-8622-ff33234a30bc",
+      "name": "Split Out"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        128,
+        -64
+      ],
+      "id": "716cf54e-870f-4a32-b84d-2e8ad3a05682",
+      "name": "Search by Industry",
+      "webhookId": "42cebe00-732e-458c-9623-163e1ecceea7"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Extract the following information from the text\nhere:{{ $json.chatInput }}\n- Industry\n- Location\n- Business \n\nIf I type in \"Find restaurants in Dubai\", the following should be the results.\nUse this same logic.\nIndustry: Cafes and restaurants\nLocation: Location\nBusiness type: restaurants\nReturn the result as a JSON object in this form\n{\n  \"Industry\": \"cafes and restaurants\",\n  \"Location\": \"Dubai\",\n  \"Business\": \"restaurant\"\n}\n\nYou are to determine the industry from these seven options:\n-fashion brands\n-cafes & restaurants\n-hotels & stays \n-beauty, skincare & wellness \n-media companies\n-production houses & creative studios\n-lifestyle & D2C brands"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        352,
+        -64
+      ],
+      "id": "2446487b-16ab-43f0-a4a1-d336887ad599",
+      "name": "Generate Keywords",
+      "credentials": {
+        "openAiApi": {
+          "id": "0ZGwCHVdDMvOkWWy",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "21bf38e0-39a7-4c85-bb81-202e602f1278",
+              "name": "startindices",
+              "value": "[1,11,21,31,41,51,61,71]",
+              "type": "array"
+            },
+            {
+              "id": "3c3a35eb-0012-4809-baf7-30db1f1164a2",
+              "name": "searchquery",
+              "value": "=(\"{{ $json.message.content.Business }} in {{ $json.message.content.Location }}\") \nAND \n(\"@gmail.com\" OR \"@yahoo.com\" OR \"@hotmail.com\" OR \"@outlook.com\" OR \"@icloud.com\" OR \"@info.com\")\n",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        704,
+        -64
+      ],
+      "id": "79468662-e608-4add-acca-0d0158772dd6",
+      "name": "Normalize"
+    },
+    {
+      "parameters": {
+        "url": "={{ \"https://www.googleapis.com/customsearch/v1\" }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "={{ $('Normalize').item.json.searchquery }}"
+            },
+            {
+              "name": "key",
+              "value": "AIzaSyBhE3QPPTl0bS3R00yi7-79bJ2MFuGqz34"
+            },
+            {
+              "name": "cx",
+              "value": "=7596fda66ca344206"
+            },
+            {
+              "name": "start",
+              "value": "={{ $json.startindices }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1152,
+        -64
+      ],
+      "id": "6bcd1c2d-d41a-465d-97b5-7db8f7808998",
+      "name": "Search google"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * Processes the raw Google Custom Search API results to extract Name and Email.\n *\n * NOTE: This code assumes the HTTP Request node returned the full API response\n * and that the data from the Set node (searchQuery) is still available.\n * The search results are expected to be nested under item.json.items.\n */\n\n// Improved regex for email extraction: avoids trailing punctuation\nconst emailRegex = /\\b([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})\\b/g;\n\nconst outputItems = [];\n\n// Loop through each item (which corresponds to one page request, e.g., startIndex 1, 21, 31, 41)\nfor (const item of $input.all()) {\n    // Check if the current item contains search results\n    if (!item.json.items || item.json.items.length === 0) {\n        continue;\n    }\n\n    // Process each individual search result item\n    for (const result of item.json.items) {\n        const title = result.title || '';\n        const snippet = result.snippet || '';\n        const link = result.link || '';\n        let email = null;\n        let entityName = title.trim();\n\n        // 1. Extract Email from Title or Snippet\n        const emailMatches = [...(title.matchAll(emailRegex)), ...(snippet.matchAll(emailRegex))];\n\n        if (emailMatches && emailMatches.length > 0) {\n            email = emailMatches[0][1].toLowerCase();\n\n            // Clean up email from trailing punctuation if any (redundant safety)\n            email = email.replace(/[.,;:!?)]*$/, '');\n\n            // Clean up Name by removing the email address from the title\n            entityName = entityName.replace(new RegExp(`\\\\s*${email}`, 'gi'), '').trim();\n\n            // ----------------------------------------------------\n            // 1b. NEW LOGIC: Name Heuristic based on Email Prefix\n            // ----------------------------------------------------\n            const emailPrefix = email.substring(0, email.indexOf('@'));\n\n            // Heuristic to check if the title is generic/messy (e.g., contains search terms)\n            const isTitleGenericOrLong =\n                /Dentist|Clinic|Medical Center|Top|Best|in Dubai/gi.test(title) || entityName.length > 50;\n\n            if (isTitleGenericOrLong) {\n                let cleanNameFromEmail = emailPrefix\n                    .replace(/[\\._-]/g, ' ') // Replace separators with spaces\n                    .replace(/\\d+/g, '') // Remove numbers\n                    .trim();\n\n                // START OF SPACING LOGIC\n                cleanNameFromEmail = cleanNameFromEmail\n                    .replace(/medicalcenter/g, ' medical center')\n                    .replace(/dentalclinic/g, ' dental clinic')\n                    .replace(/dental/g, ' dental')\n                    .replace(/center/g, ' center')\n                    .replace(/clinic/g, ' clinic')\n                    .replace(/dubai/g, ' ') // Remove location mention\n                    .replace(/\\s+/g, ' ')\n                    .trim();\n                // END OF SPACING LOGIC\n\n                // Title case each word\n                cleanNameFromEmail = cleanNameFromEmail\n                    .split(' ')\n                    .map(word => word.charAt(0).toUpperCase() + word.slice(1))\n                    .join(' ');\n\n                // If the cleaned name looks reasonable, use it\n                if (cleanNameFromEmail.length > 5) {\n                    entityName = cleanNameFromEmail;\n                }\n            }\n        }\n\n        // 2. Final cleanup of the name/title\n        entityName = entityName.replace(/\\s*\\|\\s*|-.*|(\\s*Official\\s*Site\\s*)/gi, '').trim();\n\n        // Only push results where a link and an email were successfully extracted\n        if (email && link) {\n            outputItems.push({\n                json: {\n                    name: entityName,\n                    link: link,\n                    email: email,\n                    search_query: item.json.searchQuery,\n                },\n            });\n        }\n    }\n}\n\n// ------------------------------------------------------------------\n// NEW LOGIC: Deduplication by Email Address\n// ------------------------------------------------------------------\n\nconst uniqueEmails = new Map();\n\nfor (const item of outputItems) {\n    if (item.json.email && !uniqueEmails.has(item.json.email)) {\n        uniqueEmails.set(item.json.email, item);\n    }\n}\n\nreturn Array.from(uniqueEmails.values());\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1376,
+        -64
+      ],
+      "id": "12e81f69-cab5-4851-ad13-eb5bac1f7d1f",
+      "name": "Extract Columns"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1e2NvCHABuwPI0qj0Wct5iS5P9sMml_6l1PXAapQqZWw",
+          "mode": "list",
+          "cachedResultName": "LeadGen Copy",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1e2NvCHABuwPI0qj0Wct5iS5P9sMml_6l1PXAapQqZWw/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1e2NvCHABuwPI0qj0Wct5iS5P9sMml_6l1PXAapQqZWw/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Email": "={{ $json.email }}",
+            "Name": "={{ $json.name }}",
+            "Industry": "={{ $('Generate Keywords').first().json.message.content.Industry }}",
+            "Location ": "={{ $('Generate Keywords').first().json.message.content.Location }}",
+            "Link": "={{ $json.link }}",
+            "Status": "Not Sent"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Industry",
+              "displayName": "Industry",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Location ",
+              "displayName": "Location ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Link",
+              "displayName": "Link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        1600,
+        -64
+      ],
+      "id": "53b4c48d-e5cb-43b8-b069-5c30126e027d",
+      "name": "Add to Google Sheets",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "eYqpCSo4N0a5zvrK",
+          "name": "Google Sheets account 3"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "Search google",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search by Industry": {
+      "main": [
+        [
+          {
+            "node": "Generate Keywords",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Keywords": {
+      "main": [
+        [
+          {
+            "node": "Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search google": {
+      "main": [
+        [
+          {
+            "node": "Extract Columns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Columns": {
+      "main": [
+        [
+          {
+            "node": "Add to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "46f8ac19-ce47-48a7-9429-644d9c115640",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5641850a5a4aa5e1268cdeb4c6432b269b142900e9ebd4d8cd900aafbafe5ec5"
+  },
+  "id": "c6jvqQPUsoK4XOiQ",
+  "tags": []
+}

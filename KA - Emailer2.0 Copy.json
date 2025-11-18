@@ -1,0 +1,362 @@
+{
+  "name": "KA - Emailer2.0 Copy",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "documentId": {
+          "__rl": true,
+          "value": "1e2NvCHABuwPI0qj0Wct5iS5P9sMml_6l1PXAapQqZWw",
+          "mode": "list",
+          "cachedResultName": "LeadGen Copy",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1e2NvCHABuwPI0qj0Wct5iS5P9sMml_6l1PXAapQqZWw/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Main_Sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1e2NvCHABuwPI0qj0Wct5iS5P9sMml_6l1PXAapQqZWw/edit#gid=0"
+        },
+        "event": "rowAdded",
+        "options": {}
+      },
+      "id": "4165472c-6751-425a-ade0-b97bb99b4c72",
+      "name": "New Email Added to Sheet",
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "typeVersion": 1,
+      "position": [
+        -848,
+        112
+      ],
+      "credentials": {
+        "googleSheetsTriggerOAuth2Api": {
+          "id": "c7XYFwIPSYTpKQCO",
+          "name": "Google Sheets Trigger account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1e2NvCHABuwPI0qj0Wct5iS5P9sMml_6l1PXAapQqZWw",
+          "mode": "list",
+          "cachedResultName": "LeadGen Copy",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1e2NvCHABuwPI0qj0Wct5iS5P9sMml_6l1PXAapQqZWw/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1163034586,
+          "mode": "list",
+          "cachedResultName": "outreach_scripts",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1e2NvCHABuwPI0qj0Wct5iS5P9sMml_6l1PXAapQqZWw/edit#gid=1163034586"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "=Industry",
+              "lookupValue": "={{ $json.Industry }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "788ef5ea-ba68-4066-b5ba-8b56429106d0",
+      "name": "Get Industry Email Templates",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -400,
+        112
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "eYqpCSo4N0a5zvrK",
+          "name": "Google Sheets account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// 1️⃣ Get the trigger data (new email row)\nconst triggerData = $input.item.json;\nconst recipientEmail = triggerData.email || triggerData.Email;\nconst recipientName = triggerData.name || triggerData.Name || 'there'; // ✅ GET NAME with fallback\nconst industry = (triggerData.industry || triggerData.Industry || '').trim().toLowerCase();\n\n// 2️⃣ Get all template rows from the templates sheet\nconst templates = $items('Get Industry Email Templates', 0, 0);\n\n// 3️⃣ Find the template that matches this industry\nconst matchedTemplate = templates.find(template => {\n  const templateIndustry = (template.json.industry || template.json.Industry || '').trim().toLowerCase();\n  return templateIndustry === industry;\n});\n\n// 4️⃣ Handle no match found\nif (!matchedTemplate) {\n  throw new Error(`No template found for industry: ${industry}`);\n}\n\n// 5️⃣ Extract template fields\nconst subjectTemplate = matchedTemplate.json.subject || matchedTemplate.json.Subject || '';\nconst bodyTemplate = matchedTemplate.json.body || matchedTemplate.json.Body || matchedTemplate.json.message || matchedTemplate.json.Message || '';\n\n// ✅ 6️⃣ NEW: REPLACE [Name] WITH ACTUAL NAME\nconst subject = subjectTemplate.replace(/\\[Name\\]/g, recipientName);\nconst body = bodyTemplate.replace(/\\[Name\\]/g, recipientName);\n\n// 7️⃣ Return personalized data\nreturn {\n  json: {\n    recipientEmail,\n    subject,\n    body,\n    industry,\n  },\n};\n"
+      },
+      "id": "c5c449b8-50c7-4d23-a6cd-c1c26631128f",
+      "name": "Match Industry Template",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -176,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('New Email Added to Sheet').item.json.Email }}",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.body }}",
+        "options": {
+          "appendAttribution": false,
+          "senderName": "=Cheers,  \nGazal Kharbanda  Founder, Papayup  \n📞 +91 89202 94690  \n🌐 papayup.com"
+        }
+      },
+      "id": "4f3f09ae-7d54-442e-b681-b5973587b6a1",
+      "name": "Send Industry Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        272,
+        112
+      ],
+      "webhookId": "e84444b3-b0a4-4ed1-ae72-ef30d1f82886",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "f4rmYo0083tQlnsC",
+          "name": "Gmail account 3"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        48,
+        112
+      ],
+      "id": "57b637ec-944e-481e-afd1-6e8aa6e1f66f",
+      "name": "Wait1",
+      "webhookId": "cdc43956-f179-496e-a719-4af6dc24d397"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1e2NvCHABuwPI0qj0Wct5iS5P9sMml_6l1PXAapQqZWw",
+          "mode": "list",
+          "cachedResultName": "LeadGen Copy",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1e2NvCHABuwPI0qj0Wct5iS5P9sMml_6l1PXAapQqZWw/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Main_Sheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1e2NvCHABuwPI0qj0Wct5iS5P9sMml_6l1PXAapQqZWw/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Email": "={{ $('New Email Added to Sheet').item.json.Email }}",
+            "Status": "={{ $json.labelIds[0] }}"
+          },
+          "matchingColumns": [
+            "Email"
+          ],
+          "schema": [
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Industry",
+              "displayName": "Industry",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Location ",
+              "displayName": "Location ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Link",
+              "displayName": "Link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        496,
+        112
+      ],
+      "id": "033e069f-c9b3-4bc8-9a60-c6fbfc9a0c86",
+      "name": "Update Sent Status",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "eYqpCSo4N0a5zvrK",
+          "name": "Google Sheets account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c7c4524b-dab8-4da3-a942-cc97168ab163",
+              "leftValue": "Status",
+              "rightValue": "SENT",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -624,
+        112
+      ],
+      "id": "a8691e16-2ec9-4b54-b04b-74c796962f7f",
+      "name": "Check Status"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "New Email Added to Sheet": {
+      "main": [
+        [
+          {
+            "node": "Check Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Industry Email Templates": {
+      "main": [
+        [
+          {
+            "node": "Match Industry Template",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match Industry Template": {
+      "main": [
+        [
+          {
+            "node": "Wait1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Industry Email": {
+      "main": [
+        [
+          {
+            "node": "Update Sent Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait1": {
+      "main": [
+        [
+          {
+            "node": "Send Industry Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Status": {
+      "main": [
+        [
+          {
+            "node": "Get Industry Email Templates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "b333794f-0382-4554-a7b0-bd51cbb685c4",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5641850a5a4aa5e1268cdeb4c6432b269b142900e9ebd4d8cd900aafbafe5ec5"
+  },
+  "id": "t96Axtn6nZTWS9ko",
+  "tags": []
+}

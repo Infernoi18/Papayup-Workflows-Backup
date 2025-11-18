@@ -1,0 +1,366 @@
+{
+  "name": "Phone Scraper BY AYUSH",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Phone Number Scraper - Google Places API",
+        "formDescription": "Extract business phone numbers directly from Google Places API. Fast, reliable, and accurate.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Business Type / Keyword",
+              "placeholder": "Fashion brands",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Location",
+              "placeholder": "Dubai",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Max Results",
+              "fieldType": "number",
+              "placeholder": "20",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.3,
+      "position": [
+        -800,
+        -144
+      ],
+      "id": "7831c1b3-32c6-4c5b-bb79-403452369293",
+      "name": "On form submission",
+      "webhookId": "places-api-new-form"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "query",
+              "name": "textQuery",
+              "value": "={{ $json['Business Type / Keyword'] }} in {{ $json.Location }}",
+              "type": "string"
+            },
+            {
+              "id": "location",
+              "name": "location",
+              "value": "={{ $json.Location }}",
+              "type": "string"
+            },
+            {
+              "id": "keyword",
+              "name": "keyword",
+              "value": "={{ $json['Business Type / Keyword'] }}",
+              "type": "string"
+            },
+            {
+              "id": "max",
+              "name": "maxResults",
+              "value": "={{ $json['Max Results'] }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -576,
+        -144
+      ],
+      "id": "11438c8d-fe62-4f23-b2f5-e8a1da671cc7",
+      "name": "Prepare Query1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://places.googleapis.com/v1/places:searchText",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Goog-Api-Key",
+              "value": "AIzaSyB-e-FGB751gLfatZVZI1h16IQiUyBulu0"
+            },
+            {
+              "name": "X-Goog-FieldMask",
+              "value": "places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.internationalPhoneNumber,places.websiteUri,places.rating,places.userRatingCount,places.types"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"textQuery\": \"{{ $json.textQuery }}\",\n  \"pageSize\": 20\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -352,
+        -144
+      ],
+      "id": "238b5633-a861-4f11-a177-835f27dd7e77",
+      "name": "Text Search (New)1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// FIXED: Extract places and format phone numbers for Google Sheets\nconst places = $json.places || [];\nconst maxResults = $node['Prepare Query1'].json.maxResults || 20;\nconst keyword = $node['Prepare Query1'].json.keyword;\nconst location = $node['Prepare Query1'].json.location;\n\nif (places.length === 0) {\n  return [{\n    json: {\n      error: 'No places found',\n      message: 'Try a different search term or location'\n    }\n  }];\n}\n\nreturn places.slice(0, maxResults).map(place => {\n  // Get phone number from API\n  const rawPhone = place.internationalPhoneNumber || place.nationalPhoneNumber || '';\n  \n  // Clean phone for validation (remove all non-numeric except +)\n  const cleanPhone = rawPhone.replace(/[^0-9+]/g, '');\n  \n  // CRITICAL FIX: Format phone as plain text string\n  // Prefix with apostrophe (') forces Google Sheets to treat as text, not formula\n  let phoneDisplay;\n  if (rawPhone) {\n    // Remove + and add country code format for better display\n    // Example: +971 4 123 4567 becomes 971 4 123 4567\n    phoneDisplay = rawPhone.replace(/^\\+/, '');\n  } else {\n    phoneDisplay = 'No phone';\n  }\n  \n  return {\n    json: {\n      name: place.displayName?.text || 'Unknown',\n      phone: phoneDisplay,  // Clean format without + symbol\n      website: place.websiteUri || 'No website',\n      address: place.formattedAddress || '',\n      rating: place.rating || 'N/A',\n      total_ratings: place.userRatingCount || 0,\n      types: (place.types || []).join(', '),\n      keyword: keyword,\n      location: location,\n      has_phone: cleanPhone.length > 7  // For filtering\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -128,
+        -144
+      ],
+      "id": "ccfede7a-4a3e-44a2-972c-ed88d191694d",
+      "name": "Extract Places Data1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false
+          },
+          "conditions": [
+            {
+              "id": "has-phone",
+              "leftValue": "={{ $json.has_phone }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        96,
+        -144
+      ],
+      "id": "b82fbe56-18aa-440d-b3f2-be0076bf6d6f",
+      "name": "Filter: Has Valid Phone1"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "19HtadnIsHL3FwN69o_e_IJCfXBnNmuE9LJfPMGvb7W4",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Contact Data",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/19HtadnIsHL3FwN69o_e_IJCfXBnNmuE9LJfPMGvb7W4/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Name": "={{ $json.name }}",
+            "Phone": "='{{ $json.phone }}",
+            "Website": "={{ $json.website }}",
+            "Address": "={{ $json.address }}",
+            "Rating": "={{ $json.rating }}",
+            "Total Ratings": "={{ $json.total_ratings }}",
+            "Types": "={{ $json.types }}",
+            "Keyword": "={{ $json.keyword }}",
+            "Location": "={{ $json.location }}"
+          },
+          "matchingColumns": [
+            "Name",
+            "Address"
+          ],
+          "schema": [
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Phone",
+              "displayName": "Phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Website",
+              "displayName": "Website",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Address",
+              "displayName": "Address",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Rating",
+              "displayName": "Rating",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Total Ratings",
+              "displayName": "Total Ratings",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Types",
+              "displayName": "Types",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Keyword",
+              "displayName": "Keyword",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Location",
+              "displayName": "Location",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "useAppend": true
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        320,
+        -144
+      ],
+      "id": "667149d9-1e23-489a-8cd9-8954f36edd56",
+      "name": "Save to Google Sheet1",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "eYqpCSo4N0a5zvrK",
+          "name": "Google Sheets account 3"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "On form submission": {
+      "main": [
+        [
+          {
+            "node": "Prepare Query1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Query1": {
+      "main": [
+        [
+          {
+            "node": "Text Search (New)1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Text Search (New)1": {
+      "main": [
+        [
+          {
+            "node": "Extract Places Data1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Places Data1": {
+      "main": [
+        [
+          {
+            "node": "Filter: Has Valid Phone1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter: Has Valid Phone1": {
+      "main": [
+        [
+          {
+            "node": "Save to Google Sheet1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "ecce3a3d-8399-4412-b264-853bd09ffc65",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5641850a5a4aa5e1268cdeb4c6432b269b142900e9ebd4d8cd900aafbafe5ec5"
+  },
+  "id": "1tqiiuTJtlIz5MjC",
+  "tags": []
+}
